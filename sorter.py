@@ -46,23 +46,22 @@ def determine_category(file_path):
             if any(kw in pdf_text for kw in keywords):
                 return category
 
-    return None
+    # FALLBACK: Return "Random" instead of None
+    return "Random"
 
 def process_file(file_path):
     filename = os.path.basename(file_path)
 
+    # Ignore hidden/temporary browser files
     if filename.startswith(".") or filename.endswith((".tmp", ".crdownload", ".part")):
         return
 
     time.sleep(1)
 
+    # Get the target category (will be "Random" if no keyword matches)
     target_category = determine_category(file_path)
 
-    if target_category is None:
-        print(f"Skipped (Unmatched): {filename}")
-        return
-
-    # Use TARGET_BASE from config (Path objects work cleanly with os.path.join)
+    # Build target directory path (e.g., StudySpace/Random/)
     destination_dir = os.path.join(TARGET_BASE, target_category)
     os.makedirs(destination_dir, exist_ok=True)
 
@@ -73,7 +72,7 @@ def process_file(file_path):
 
     try:
         shutil.move(file_path, target_path)
-        print(f"Successfully Sorted: {filename} -> {destination_dir}")
+        print(f"Successfully Moved: {filename} -> StudySpace/{target_category}/")
     except Exception as e:
         print(f"Error moving {filename}: {e}")
 
