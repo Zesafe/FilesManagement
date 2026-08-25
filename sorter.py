@@ -10,7 +10,7 @@ from config import SORTING_FOLDER, TARGET_BASE
 # Map course/category subfolders to relevant keywords.
 # Order matters: top categories take precedence.
 COURSE_RULES = {
-    "Module1": ["SubModule1_1", "SubModule1_2", "SubModule1_3", "SubModule1_4", "SubModule1_5"],
+    "Softwaretechnik": ["softwaretechnik", "SubModule1_2", "SubModule1_3", "SubModule1_4", "SubModule1_5"],
     "Module2": ["SubModule2_1", "SubModule2_2", "SubModule2_3", "SubModule2_4", "SubModule2_5"],
     "Module3": ["SubModule3_1", "SubModule3_2", "SubModule3_3", "SubModule3_4", "SubModule3_5", "SubModule3_6"],
     "Module4": ["SubModule4_1", "SubModule4_2", "SubModule4_3", "SubModule4_4"]
