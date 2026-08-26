@@ -7,7 +7,8 @@ from pathlib import Path
 from pypdf import PdfReader
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
-    QLabel, QPushButton, QInputDialog, QMessageBox, QFrame, QGraphicsDropShadowEffect
+    QLabel, QPushButton, QInputDialog, QMessageBox, QFrame, 
+    QGraphicsDropShadowEffect, QDialog, QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QColor, QDesktopServices
@@ -22,7 +23,9 @@ def load_rules():
     if not RULES_FILE.exists():
         default_rules = {
             "Softwaretechnik": ["softwaretechnik", "dudenhefner"],
-            "CS101_Algorithms": ["algorithm", "cs101"]
+            "CS101_Algorithms": ["algorithm", "cs101"],
+            "Math201_LinearAlgebra": ["matrix", "vector", "linear algebra"],
+            "CS202_WebDev": ["javascript", "css", "html", "react"]
         }
         save_rules(default_rules)
         return default_rules
@@ -64,7 +67,158 @@ def determine_category(file_path, course_rules):
 
     return "Random"
 
-# --- MAIN MODERN GUI ---
+# --- MODULE MANAGER TABLE DIALOG ---
+class ModuleManagerDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Manage Course Modules")
+        self.setFixedSize(650, 450)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                font-family: 'Segoe UI', sans-serif;
+            }
+            QTableWidget {
+                background-color: #181825;
+                color: #cdd6f4;
+                gridline-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 8px;
+            }
+            QHeaderView::section {
+                background-color: #313244;
+                color: #f5e0dc;
+                font-weight: bold;
+                padding: 8px;
+                border: none;
+            }
+            QPushButton {
+                background-color: #313244;
+                color: #cdd6f4;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #45475a;
+                border-color: #89b4fa;
+            }
+            QPushButton#PrimaryBtn {
+                background-color: #89b4fa;
+                color: #11111b;
+                border: none;
+            }
+            QPushButton#PrimaryBtn:hover {
+                background-color: #b4befe;
+            }
+            QPushButton#DeleteBtn {
+                background-color: #f38ba8;
+                color: #11111b;
+                border: none;
+                padding: 4px 8px;
+            }
+            QPushButton#DeleteBtn:hover {
+                background-color: #eba0ac;
+            }
+        """)
+
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(20, 20, 20, 20)
+
+        # Title
+        title = QLabel("Existing Modules & Keywords", self)
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #f5e0dc; margin-bottom: 10px;")
+        self.layout.addWidget(title)
+
+        # Table Widget
+        self.table = QTableWidget(self)
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Module Name", "Keywords", "Action"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(0, 180)
+        self.table.setColumnWidth(2, 80)
+        self.layout.addWidget(self.table)
+
+        # Bottom Buttons
+        btn_layout = QHBoxLayout()
+        self.add_btn = QPushButton(" ➕ Add New Module", self)
+        self.add_btn.setObjectName("PrimaryBtn")
+        self.add_btn.clicked.connect(self.add_module)
+        btn_layout.addWidget(self.add_btn)
+
+        self.close_btn = QPushButton("Done", self)
+        self.close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(self.close_btn)
+
+        self.layout.addLayout(btn_layout)
+
+        self.load_table_data()
+
+    def load_table_data(self):
+        rules = load_rules()
+        self.table.setRowCount(len(rules))
+
+        for row, (module, keywords) in enumerate(rules.items()):
+            # Module Name Item
+            mod_item = QTableWidgetItem(module)
+            mod_item.setFlags(mod_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 0, mod_item)
+
+            # Keywords Item
+            kw_item = QTableWidgetItem(", ".join(keywords))
+            kw_item.setFlags(kw_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 1, kw_item)
+
+            # Delete Button Action
+            del_btn = QPushButton("🗑", self)
+            del_btn.setObjectName("DeleteBtn")
+            del_btn.clicked.connect(lambda _, m=module: self.delete_module(m))
+            self.table.setCellWidget(row, 2, del_btn)
+
+    def add_module(self):
+        module_name, ok1 = QInputDialog.getText(self, "New Module", "Enter Module/Folder Name:")
+        if not ok1 or not module_name.strip():
+            return
+        module_name = module_name.strip()
+
+        keywords_str, ok2 = QInputDialog.getText(
+            self, "Module Keywords", 
+            f"Enter keywords for '{module_name}' (separated by commas):"
+        )
+        if not ok2 or not keywords_str.strip():
+            return
+
+        new_keywords = [k.strip().lower() for k in keywords_str.split(",") if k.strip()]
+
+        rules = load_rules()
+        if module_name in rules:
+            existing = set(rules[module_name])
+            existing.update(new_keywords)
+            rules[module_name] = list(existing)
+        else:
+            rules[module_name] = new_keywords
+
+        save_rules(rules)
+        self.load_table_data()
+
+    def delete_module(self, module_name):
+        reply = QMessageBox.question(
+            self, "Confirm Delete", 
+            f"Are you sure you want to delete module '{module_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            rules = load_rules()
+            if module_name in rules:
+                del rules[module_name]
+                save_rules(rules)
+                self.load_table_data()
+
+# --- MAIN GUI ---
 class FileDropperApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -76,7 +230,6 @@ class FileDropperApp(QWidget):
         self.setFixedSize(450, 420)
         self.setAcceptDrops(True)
         
-        # Modern Dark Theme Stylesheet (Catppuccin Mocha Palette)
         self.setStyleSheet("""
             QWidget {
                 background-color: #1e1e2e;
@@ -129,7 +282,6 @@ class FileDropperApp(QWidget):
         self.drop_frame = QFrame(self)
         self.drop_frame.setObjectName("DropFrame")
         
-        # Shadow effect for Drop Frame
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
         shadow.setColor(QColor(0, 0, 0, 80))
@@ -139,13 +291,11 @@ class FileDropperApp(QWidget):
         drop_layout = QVBoxLayout(self.drop_frame)
         drop_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Drop Icon
         icon_label = QLabel(self)
         icon_label.setPixmap(qta.icon('fa5s.file-upload', color='#89b4fa').pixmap(48, 48))
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         drop_layout.addWidget(icon_label)
 
-        # Drop Text
         self.drop_label = QLabel("Drag & Drop Files Here", self)
         self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.drop_label.setStyleSheet("font-size: 15px; font-weight: 600; color: #a6adc8; margin-top: 8px;")
@@ -163,13 +313,13 @@ class FileDropperApp(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
 
-        # Add Module Button
-        self.add_btn = QPushButton(" ➕ Add Module", self)
-        self.add_btn.setObjectName("PrimaryBtn")
-        self.add_btn.clicked.connect(self.add_new_module)
-        btn_layout.addWidget(self.add_btn)
+        # Manage Modules Button
+        self.manage_btn = QPushButton(" ⚙️ Manage Modules", self)
+        self.manage_btn.setObjectName("PrimaryBtn")
+        self.manage_btn.clicked.connect(self.open_module_manager)
+        btn_layout.addWidget(self.manage_btn)
 
-        # Open StudySpace Folder Button
+        # Open Target Folder Button
         self.open_folder_btn = QPushButton(" 📁 Open Archive", self)
         self.open_folder_btn.clicked.connect(self.open_target_folder)
         btn_layout.addWidget(self.open_folder_btn)
@@ -177,39 +327,15 @@ class FileDropperApp(QWidget):
         layout.addLayout(btn_layout)
         self.setLayout(layout)
 
+    def open_module_manager(self):
+        dialog = ModuleManagerDialog(self)
+        dialog.exec()
+        # Reload updated rules into memory after closing the dialog
+        self.course_rules = load_rules()
+
     def open_target_folder(self):
-        """Opens the desktop StudySpace directory directly in Windows Explorer."""
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(TARGET_BASE)))
 
-    def add_new_module(self):
-        module_name, ok1 = QInputDialog.getText(self, "New Module", "Enter Module/Folder Name:")
-        if not ok1 or not module_name.strip():
-            return
-        module_name = module_name.strip()
-
-        keywords_str, ok2 = QInputDialog.getText(
-            self, "Module Keywords", 
-            f"Enter keywords for '{module_name}'\n(Separated by commas):"
-        )
-        if not ok2 or not keywords_str.strip():
-            return
-
-        new_keywords = [k.strip().lower() for k in keywords_str.split(",") if k.strip()]
-
-        if module_name in self.course_rules:
-            existing = set(self.course_rules[module_name])
-            existing.update(new_keywords)
-            self.course_rules[module_name] = list(existing)
-        else:
-            self.course_rules[module_name] = new_keywords
-
-        save_rules(self.course_rules)
-        QMessageBox.information(
-            self, "Updated", 
-            f"Saved module '{module_name}' with keywords:\n" + ", ".join(self.course_rules[module_name])
-        )
-
-    # Drag & Drop Events
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
