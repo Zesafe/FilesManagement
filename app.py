@@ -8,10 +8,11 @@ from pypdf import PdfReader
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QInputDialog, QMessageBox, QFrame, 
-    QGraphicsDropShadowEffect, QDialog, QTableWidget, QTableWidgetItem, QHeaderView
+    QGraphicsDropShadowEffect, QTableWidget, QTableWidgetItem, 
+    QHeaderView, QListWidget, QListWidgetItem, QSplitter
 )
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QColor, QDesktopServices
+from PyQt6.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QColor, QDesktopServices, QIcon
 import qtawesome as qta
 
 from config import TARGET_BASE
@@ -22,8 +23,8 @@ RULES_FILE = Path(__file__).parent / "rules.json"
 def load_rules():
     if not RULES_FILE.exists():
         default_rules = {
-            "Softwaretechnik": ["softwaretechnik", "dudenhefner"],
-            "CS101_Algorithms": ["algorithm", "cs101"],
+            "Softwaretechnik": ["softwaretechnik", "dudenhefner", "entwurfsmuster"],
+            "CS101_Algorithms": ["algorithm", "cs101", "complexity"],
             "Math201_LinearAlgebra": ["matrix", "vector", "linear algebra"],
             "CS202_WebDev": ["javascript", "css", "html", "react"]
         }
@@ -67,117 +68,250 @@ def determine_category(file_path, course_rules):
 
     return "Random"
 
-# --- MODULE MANAGER TABLE DIALOG ---
-class ModuleManagerDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Manage Course Modules")
-        self.setFixedSize(650, 450)
+# --- MAIN APP UI ---
+class StudyOrganizerApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.course_rules = load_rules()
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle("StudySpace | Automated File Organizer")
+        self.resize(920, 580)
+        self.setMinimumSize(850, 500)
+        self.setAcceptDrops(True)
+        
+        # Premium Dark Palette (Catppuccin Mocha Inspired)
         self.setStyleSheet("""
-            QDialog {
-                background-color: #1e1e2e;
+            QWidget {
+                background-color: #0f111a;
                 color: #cdd6f4;
-                font-family: 'Segoe UI', sans-serif;
+                font-family: 'Segoe UI', Inter, sans-serif;
             }
+
+            /* Sidebar Panel */
+            QFrame#Sidebar {
+                background-color: #161824;
+                border-right: 1px solid #1e2030;
+            }
+
+            /* Header Section */
+            QLabel#AppHeader {
+                font-size: 22px;
+                font-weight: 800;
+                color: #cba6f7;
+                padding-bottom: 2px;
+            }
+            QLabel#AppSubheader {
+                font-size: 11px;
+                color: #6c7086;
+                font-weight: 500;
+            }
+
+            /* Main Drop Zone */
+            QFrame#DropFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #181a26, stop:1 #12141d);
+                border: 2px dashed #3b4261;
+                border-radius: 20px;
+            }
+
+            /* Table Styling */
             QTableWidget {
-                background-color: #181825;
+                background-color: #161824;
                 color: #cdd6f4;
-                gridline-color: #313244;
-                border: 1px solid #45475a;
-                border-radius: 8px;
+                gridline-color: #1e2030;
+                border: 1px solid #232538;
+                border-radius: 12px;
+                font-size: 13px;
+                selection-background-color: #313244;
             }
             QHeaderView::section {
-                background-color: #313244;
-                color: #f5e0dc;
-                font-weight: bold;
-                padding: 8px;
+                background-color: #1e2030;
+                color: #b4befe;
+                font-weight: 700;
+                font-size: 12px;
+                padding: 10px;
                 border: none;
+                text-transform: uppercase;
             }
-            QPushButton {
-                background-color: #313244;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+
+            /* History Activity Feed */
+            QListWidget#HistoryList {
+                background-color: #161824;
+                border: 1px solid #232538;
+                border-radius: 12px;
+                padding: 6px;
+                font-size: 12px;
+            }
+            QListWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #1e2030;
                 border-radius: 6px;
-                padding: 6px 12px;
+            }
+
+            /* Buttons */
+            QPushButton {
+                background-color: #232538;
+                color: #cdd6f4;
+                border: 1px solid #3b4261;
+                border-radius: 10px;
+                padding: 10px 16px;
                 font-weight: 600;
+                font-size: 13px;
             }
             QPushButton:hover {
-                background-color: #45475a;
+                background-color: #2a2d43;
                 border-color: #89b4fa;
             }
-            QPushButton#PrimaryBtn {
-                background-color: #89b4fa;
+            QPushButton#AccentBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #cba6f7, stop:1 #89b4fa);
                 color: #11111b;
                 border: none;
+                font-weight: 700;
             }
-            QPushButton#PrimaryBtn:hover {
-                background-color: #b4befe;
+            QPushButton#AccentBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ddb6f2, stop:1 #b4befe);
             }
             QPushButton#DeleteBtn {
-                background-color: #f38ba8;
-                color: #11111b;
-                border: none;
-                padding: 4px 8px;
+                background-color: #31232e;
+                color: #f38ba8;
+                border: 1px solid #452937;
+                border-radius: 6px;
+                padding: 4px 10px;
             }
             QPushButton#DeleteBtn:hover {
-                background-color: #eba0ac;
+                background-color: #f38ba8;
+                color: #11111b;
             }
         """)
 
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(20, 20, 20, 20)
+        # Main Layout (Split Sidebar & Right Dashboard)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Title
-        title = QLabel("Existing Modules & Keywords", self)
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #f5e0dc; margin-bottom: 10px;")
-        self.layout.addWidget(title)
+        # -------------------------------------------------------------------
+        # LEFT SIDEBAR: LOGS & QUICK ACTIONS
+        # -------------------------------------------------------------------
+        sidebar = QFrame(self)
+        sidebar.setObjectName("Sidebar")
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(20, 25, 20, 25)
+        sidebar_layout.setSpacing(15)
 
-        # Table Widget
-        self.table = QTableWidget(self)
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["Module Name", "Keywords", "Action"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(0, 180)
-        self.table.setColumnWidth(2, 80)
-        self.layout.addWidget(self.table)
+        # App Branding Header
+        brand_layout = QVBoxLayout()
+        header_title = QLabel("StudySpace", self)
+        header_title.setObjectName("AppHeader")
+        header_sub = QLabel("AUTOMATED SORTING HUB", self)
+        header_sub.setObjectName("AppSubheader")
+        brand_layout.addWidget(header_title)
+        brand_layout.addWidget(header_sub)
+        sidebar_layout.addLayout(brand_layout)
 
-        # Bottom Buttons
-        btn_layout = QHBoxLayout()
-        self.add_btn = QPushButton(" ➕ Add New Module", self)
-        self.add_btn.setObjectName("PrimaryBtn")
-        self.add_btn.clicked.connect(self.add_module)
-        btn_layout.addWidget(self.add_btn)
+        # Action Buttons
+        self.open_folder_btn = QPushButton(" Open Archive Folder", self)
+        self.open_folder_btn.setIcon(qta.icon('fa5s.folder-open', color='#cdd6f4'))
+        self.open_folder_btn.clicked.connect(self.open_target_folder)
+        sidebar_layout.addWidget(self.open_folder_btn)
 
-        self.close_btn = QPushButton("Done", self)
-        self.close_btn.clicked.connect(self.accept)
-        btn_layout.addWidget(self.close_btn)
+        # Recent Activity Feed Title
+        history_title = QLabel("Recent Activity Log", self)
+        history_title.setStyleSheet("font-size: 12px; font-weight: 700; color: #a6adc8; margin-top: 10px;")
+        sidebar_layout.addWidget(history_title)
 
-        self.layout.addLayout(btn_layout)
+        # Recent Activity List Widget
+        self.history_list = QListWidget(self)
+        self.history_list.setObjectName("HistoryList")
+        sidebar_layout.addWidget(self.history_list)
 
+        main_layout.addWidget(sidebar, stretch=3)
+
+        # -------------------------------------------------------------------
+        # RIGHT CONTENT AREA: DROP ZONE & MODULE EDITOR TABLE
+        # -------------------------------------------------------------------
+        content_frame = QFrame(self)
+        content_layout = QVBoxLayout(content_frame)
+        content_layout.setContentsMargins(25, 25, 25, 25)
+        content_layout.setSpacing(20)
+
+        # Drop Zone Frame
+        self.drop_frame = QFrame(self)
+        self.drop_frame.setObjectName("DropFrame")
+        self.drop_frame.setMinimumHeight(180)
+
+        drop_layout = QVBoxLayout(self.drop_frame)
+        drop_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.drop_icon = QLabel(self)
+        self.drop_icon.setPixmap(qta.icon('fa5s.cloud-upload-alt', color='#89b4fa').pixmap(54, 54))
+        self.drop_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        drop_layout.addWidget(self.drop_icon)
+
+        self.drop_label = QLabel("Drag & Drop Study Files Here", self)
+        self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.drop_label.setStyleSheet("font-size: 16px; font-weight: 700; color: #cdd6f4; margin-top: 8px;")
+        drop_layout.addWidget(self.drop_label)
+
+        self.status_label = QLabel("PDF & Document Auto-Classifier Active", self)
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("font-size: 12px; color: #6c7086;")
+        drop_layout.addWidget(self.status_label)
+
+        content_layout.addWidget(self.drop_frame)
+
+        # Modules Manager Header + Add Button
+        table_header_layout = QHBoxLayout()
+        table_title = QLabel("Configured Modules", self)
+        table_title.setStyleSheet("font-size: 16px; font-weight: 700; color: #f5e0dc;")
+        table_header_layout.addWidget(table_title)
+        table_header_layout.addStretch()
+
+        self.add_mod_btn = QPushButton(" Add Module", self)
+        self.add_mod_btn.setObjectName("AccentBtn")
+        self.add_mod_btn.setIcon(qta.icon('fa5s.plus', color='#11111b'))
+        self.add_mod_btn.clicked.connect(self.add_module)
+        table_header_layout.addWidget(self.add_mod_btn)
+
+        content_layout.addLayout(table_header_layout)
+
+        # Rules Table
+        self.rules_table = QTableWidget(self)
+        self.rules_table.setColumnCount(3)
+        self.rules_table.setHorizontalHeaderLabels(["Module Category", "Assigned Keywords", "Action"])
+        self.rules_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.rules_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.rules_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.rules_table.setColumnWidth(0, 190)
+        self.rules_table.setColumnWidth(2, 75)
+        content_layout.addWidget(self.rules_table)
+
+        main_layout.addWidget(content_frame, stretch=7)
+
+        # Load data into table
         self.load_table_data()
 
+    # --- TABLE MANAGEMENT LOGIC ---
     def load_table_data(self):
-        rules = load_rules()
-        self.table.setRowCount(len(rules))
+        self.course_rules = load_rules()
+        self.rules_table.setRowCount(len(self.course_rules))
 
-        for row, (module, keywords) in enumerate(rules.items()):
-            # Module Name Item
+        for row, (module, keywords) in enumerate(self.course_rules.items()):
+            # Module Name
             mod_item = QTableWidgetItem(module)
             mod_item.setFlags(mod_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 0, mod_item)
+            self.rules_table.setItem(row, 0, mod_item)
 
-            # Keywords Item
+            # Keywords
             kw_item = QTableWidgetItem(", ".join(keywords))
             kw_item.setFlags(kw_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 1, kw_item)
+            self.rules_table.setItem(row, 1, kw_item)
 
-            # Delete Button Action
+            # Delete Action
             del_btn = QPushButton("🗑", self)
             del_btn.setObjectName("DeleteBtn")
             del_btn.clicked.connect(lambda _, m=module: self.delete_module(m))
-            self.table.setCellWidget(row, 2, del_btn)
+            self.rules_table.setCellWidget(row, 2, del_btn)
 
     def add_module(self):
         module_name, ok1 = QInputDialog.getText(self, "New Module", "Enter Module/Folder Name:")
@@ -204,6 +338,7 @@ class ModuleManagerDialog(QDialog):
 
         save_rules(rules)
         self.load_table_data()
+        self.add_history_entry(f"Updated module rules for '{module_name}'", success=True)
 
     def delete_module(self, module_name):
         reply = QMessageBox.question(
@@ -217,144 +352,46 @@ class ModuleManagerDialog(QDialog):
                 del rules[module_name]
                 save_rules(rules)
                 self.load_table_data()
-
-# --- MAIN GUI ---
-class FileDropperApp(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.course_rules = load_rules()
-        self.initUI()
-
-    def initUI(self):
-        self.setWindowTitle("Study File Organizer")
-        self.setFixedSize(450, 420)
-        self.setAcceptDrops(True)
-        
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #1e1e2e;
-                color: #cdd6f4;
-                font-family: 'Segoe UI', sans-serif;
-            }
-            QFrame#DropFrame {
-                background-color: #181825;
-                border: 2px dashed #89b4fa;
-                border-radius: 16px;
-            }
-            QFrame#DropFrame:hover {
-                border-color: #a6e3a1;
-                background-color: #1e1e2e;
-            }
-            QPushButton {
-                background-color: #313244;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
-                border-radius: 10px;
-                padding: 10px;
-                font-weight: 600;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #45475a;
-                border-color: #89b4fa;
-            }
-            QPushButton#PrimaryBtn {
-                background-color: #89b4fa;
-                color: #11111b;
-                border: none;
-            }
-            QPushButton#PrimaryBtn:hover {
-                background-color: #b4befe;
-            }
-        """)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(25, 20, 25, 20)
-        layout.setSpacing(15)
-
-        # Header Title
-        self.title_label = QLabel("Study Workspace", self)
-        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.title_label.setStyleSheet("font-size: 22px; font-weight: 700; color: #f5e0dc;")
-        layout.addWidget(self.title_label)
-
-        # Drop Zone Container
-        self.drop_frame = QFrame(self)
-        self.drop_frame.setObjectName("DropFrame")
-        
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor(0, 0, 0, 80))
-        shadow.setYOffset(4)
-        self.drop_frame.setGraphicsEffect(shadow)
-
-        drop_layout = QVBoxLayout(self.drop_frame)
-        drop_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        icon_label = QLabel(self)
-        icon_label.setPixmap(qta.icon('fa5s.file-upload', color='#89b4fa').pixmap(48, 48))
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        drop_layout.addWidget(icon_label)
-
-        self.drop_label = QLabel("Drag & Drop Files Here", self)
-        self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drop_label.setStyleSheet("font-size: 15px; font-weight: 600; color: #a6adc8; margin-top: 8px;")
-        drop_layout.addWidget(self.drop_label)
-
-        layout.addWidget(self.drop_frame, stretch=1)
-
-        # Status Bar
-        self.status_label = QLabel("Ready to process...", self)
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("font-size: 12px; color: #a6adc8;")
-        layout.addWidget(self.status_label)
-
-        # Action Buttons Layout
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(10)
-
-        # Manage Modules Button
-        self.manage_btn = QPushButton(" ⚙️ Manage Modules", self)
-        self.manage_btn.setObjectName("PrimaryBtn")
-        self.manage_btn.clicked.connect(self.open_module_manager)
-        btn_layout.addWidget(self.manage_btn)
-
-        # Open Target Folder Button
-        self.open_folder_btn = QPushButton(" 📁 Open Archive", self)
-        self.open_folder_btn.clicked.connect(self.open_target_folder)
-        btn_layout.addWidget(self.open_folder_btn)
-
-        layout.addLayout(btn_layout)
-        self.setLayout(layout)
-
-    def open_module_manager(self):
-        dialog = ModuleManagerDialog(self)
-        dialog.exec()
-        # Reload updated rules into memory after closing the dialog
-        self.course_rules = load_rules()
+                self.add_history_entry(f"Deleted module '{module_name}'")
 
     def open_target_folder(self):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(TARGET_BASE)))
 
+    def add_history_entry(self, message, success=True):
+        timestamp = time.strftime("%H:%M:%S")
+        item = QListWidgetItem(f"[{timestamp}] {message}")
+        if success:
+            item.setForeground(QColor("#a6e3a1"))
+        else:
+            item.setForeground(QColor("#f38ba8"))
+        self.history_list.insertItem(0, item)
+
+    # --- DRAG & DROP EVENT HANDLERS ---
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
             self.drop_frame.setStyleSheet("""
                 QFrame#DropFrame {
-                    background-color: #313244;
+                    background-color: #1e2030;
                     border: 2px dashed #a6e3a1;
-                    border-radius: 16px;
+                    border-radius: 20px;
                 }
             """)
+            self.drop_icon.setPixmap(qta.icon('fa5s.cloud-download-alt', color='#a6e3a1').pixmap(54, 54))
+            self.drop_label.setText("Release File to Sort")
+            self.drop_label.setStyleSheet("font-size: 16px; font-weight: 700; color: #a6e3a1; margin-top: 8px;")
 
     def dragLeaveEvent(self, event):
         self.drop_frame.setStyleSheet("""
             QFrame#DropFrame {
-                background-color: #181825;
-                border: 2px dashed #89b4fa;
-                border-radius: 16px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #181a26, stop:1 #12141d);
+                border: 2px dashed #3b4261;
+                border-radius: 20px;
             }
         """)
+        self.drop_icon.setPixmap(qta.icon('fa5s.cloud-upload-alt', color='#89b4fa').pixmap(54, 54))
+        self.drop_label.setText("Drag & Drop Study Files Here")
+        self.drop_label.setStyleSheet("font-size: 16px; font-weight: 700; color: #cdd6f4; margin-top: 8px;")
 
     def dropEvent(self, event: QDropEvent):
         self.dragLeaveEvent(None)
@@ -368,8 +405,7 @@ class FileDropperApp(QWidget):
         filename = os.path.basename(file_path)
 
         if filename.startswith(".") or filename.endswith((".tmp", ".crdownload", ".part")):
-            self.status_label.setText("Ignored temporary file.")
-            self.status_label.setStyleSheet("color: #f9e2af;")
+            self.add_history_entry(f"Ignored temporary file '{filename}'", success=False)
             return
 
         target_category = determine_category(file_path, self.course_rules)
@@ -383,15 +419,17 @@ class FileDropperApp(QWidget):
 
         try:
             shutil.move(file_path, target_path)
-            self.status_label.setText(f"Moved to: StudySpace/{target_category}/")
-            self.status_label.setStyleSheet("color: #a6e3a1; font-weight: bold;")
+            self.status_label.setText(f"Last sorted: {filename} ➔ {target_category}")
+            self.status_label.setStyleSheet("font-size: 12px; color: #a6e3a1; font-weight: 600;")
+            self.add_history_entry(f"Sorted '{filename}' to /{target_category}", success=True)
         except Exception as e:
             self.status_label.setText(f"Error moving file: {e}")
-            self.status_label.setStyleSheet("color: #f38ba8;")
+            self.status_label.setStyleSheet("font-size: 12px; color: #f38ba8;")
+            self.add_history_entry(f"Error moving '{filename}'", success=False)
 
 if __name__ == "__main__":
     os.makedirs(TARGET_BASE, exist_ok=True)
     app = QApplication(sys.argv)
-    ex = FileDropperApp()
+    ex = StudyOrganizerApp()
     ex.show()
     sys.exit(app.exec())
